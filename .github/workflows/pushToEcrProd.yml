@@ -1,0 +1,62 @@
+name: Email Forward Confirmation Prod
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  upload_to_aws_lambda:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 1: Configure AWS Credentials
+      - name: Configure AWS environment
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Step 2: Login to Amazon ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Step 3: Set up Docker Buildx (required for caching)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Step 4: Build and push directly to ECR with layer caching
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          # Lambda only accepts single-platform image manifests; Buildx attestations turn the
+          # pushed image into an index that Lambda rejects.
+          provenance: false
+          sbom: false
+          tags: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/email-forward-confirmation/prod:latest
+          # Production runs as the "beta" environment, the same name autopilot uses for prod.
+          build-args: |
+            ENVIRONMENT=beta
+            GMAIL_CLIENT_ID=${{ secrets.GMAIL_CLIENT_ID }}
+            GMAIL_CLIENT_SECRET=${{ secrets.GMAIL_CLIENT_SECRET }}
+            GMAIL_REFRESH_TOKEN=${{ secrets.GMAIL_REFRESH_TOKEN }}
+            SLACK_DATA_FETCHING_TOKEN=${{ secrets.SLACK_DATA_FETCHING_TOKEN }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Step 5: Point the Lambda at the new image. Lambda pins the digest it was deployed with,
+      # so a re-pushed :latest is not picked up until the function code is updated.
+      - name: Update Lambda function
+        run: |
+          aws lambda update-function-code \
+            --function-name email-forward-confirmation-prod \
+            --image-uri ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/email-forward-confirmation/prod:latest
+          aws lambda wait function-updated --function-name email-forward-confirmation-prod

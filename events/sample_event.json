@@ -1,0 +1,20 @@
+{
+  "user": { "companyId": 1234 },
+  "userId": 56,
+  "apiLink": "http://127.0.0.1:8099",
+  "connectionId": "00000000-0000-0000-0000-000000000000",
+  "authMethod": "email_otp",
+  "integrationPartner": { "id": "ip-zepto", "name": "Zepto" },
+  "job": { "id": "job-0001", "type": 15 },
+  "dataPeriod": {},
+  "apiConfig": [
+    {
+      "id": 1,
+      "customer_id": "seller@example.com",
+      "client_id": "",
+      "client_name": "",
+      "accessToken": "",
+      "accHash": "test"
+    }
+  ]
+}
